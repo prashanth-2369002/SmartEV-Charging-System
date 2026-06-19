@@ -1,170 +1,161 @@
-# Hardware Requirements
+# Hardware Design — Smart EV Charging Station with BMS
 
 ## Bill of Materials (BOM)
 
-All components listed are off-the-shelf modules available from common electronics distributors (Robocraze, Evelta, Amazon India, Mouser). Prices are approximate and in Indian Rupees (June 2025).
-
-| # | Component | Part / Module | Qty | Approx. Cost (₹) | Purpose |
+| # | Component | Specification | Qty | Est. Cost (INR) | Purpose |
 |---|---|---|---|---|---|
-| 1 | Microcontroller | ESP32 DevKit v1 (38-pin) | 1 | 450 | Main controller — Wi-Fi, BT, dual-core 240 MHz |
-| 2 | RFID Reader | MFRC522 (3.3V SPI, blue board) | 1 | 130 | User authentication via 13.56 MHz cards |
-| 3 | RFID Cards/Fobs | ISO-14443A MIFARE Classic 1K | 4 | 60 (set) | Test user cards |
-| 4 | Power Sensor | INA219 breakout (Adafruit or clone) | 1 | 220 | Voltage + current measurement, I2C |
-| 5 | Temperature Sensor | DS18B20 waterproof probe, TO-92 | 2 | 120 (pair) | Cell temp + ambient temp, 1-Wire |
-| 6 | Current Sensor | ACS712-5A module | 1 | 120 | High-side current sense (backup / overcurrent) |
-| 7 | Relay Module | 5V single-channel relay, opto-isolated | 1 | 80 | Charging circuit on/off switch |
-| 8 | LCD Display | 20×4 character LCD with I2C backpack (PCF8574) | 1 | 250 | Live status display |
-| 9 | Buzzer | 5V active buzzer module | 1 | 30 | Audio alerts |
-| 10 | LEDs | 5mm green + red LED (with 330Ω resistors) | 2 | 20 | Status indicators |
-| 11 | Charging Module | TP4056 with DW01A protection (micro-USB) | 1 | 60 | Bench-level Li-ion charging demo |
-| 12 | Battery Pack | 18650 Li-ion, 3S2P (3 × 2 cells, ~11.1V nominal) | 1 | 800 | Simulated EV battery for demo |
-| 13 | Battery Holder | 3S 18650 holder with leads | 1 | 120 | Holds the cell pack |
-| 14 | Pull-up Resistors | 4.7 kΩ, 1/4W (DS18B20 1-Wire pull-up) | 2 | 5 | 1-Wire bus signal integrity |
-| 15 | Breadboard | 830-point solderless breadboard | 1 | 120 | Prototyping platform |
-| 16 | Jumper Wires | Male-to-male + male-to-female, 20 cm | 40 | 100 | Connections |
-| 17 | USB Power Adapter | 5V 3A USB-A adapter | 1 | 250 | Powers ESP32 and all 3.3V/5V modules |
-| 18 | USB Cable | Micro-USB or USB-C (match ESP32 board) | 1 | 80 | ESP32 programming + power |
-| 19 | Multimeter | Any basic DMM (Uni-T UT33 or equivalent) | 1 | — | Verification and debugging |
-
-**Total estimated BOM cost: ₹ 2,815** (excluding multimeter)
-
----
-
-## Pin Mapping
-
-### ESP32 DevKit v1 — Full Pin Assignment
-
-```
-ESP32 Pin       │ Signal        │ Connected To          │ Protocol
-────────────────┼───────────────┼───────────────────────┼──────────
-GPIO 5  (D5)    │ SS / SDA      │ MFRC522 SDA           │ SPI CS
-GPIO 18 (D18)   │ SCK           │ MFRC522 SCK           │ SPI CLK
-GPIO 23 (D23)   │ MOSI          │ MFRC522 MOSI          │ SPI
-GPIO 19 (D19)   │ MISO          │ MFRC522 MISO          │ SPI
-GPIO 2  (D2)    │ RST           │ MFRC522 RST           │ GPIO OUT
-GPIO 21 (D21)   │ SDA           │ INA219 SDA, LCD SDA   │ I2C
-GPIO 22 (D22)   │ SCL           │ INA219 SCL, LCD SCL   │ I2C
-GPIO 4  (D4)    │ 1-Wire Data   │ DS18B20 DATA (both)   │ 1-Wire
-GPIO 26 (D26)   │ Relay Control │ Relay IN              │ GPIO OUT
-GPIO 27 (D27)   │ Buzzer        │ Buzzer +              │ GPIO OUT
-GPIO 32 (D32)   │ LED Green     │ Green LED (+ 330Ω)    │ GPIO OUT
-GPIO 33 (D33)   │ LED Red       │ Red LED (+ 330Ω)      │ GPIO OUT
-3.3V            │ VCC           │ MFRC522, INA219       │ Power
-5V (VIN)        │ VCC           │ Relay, Buzzer, LCD    │ Power
-GND             │ GND           │ All modules           │ Common GND
-```
-
-> **Note:** The I2C bus has two devices: INA219 at address `0x40` and LCD (PCF8574) at `0x27`. Both share GPIO 21/22. This is valid — I2C is a multi-device bus. Ensure the PCF8574 address jumpers on the LCD backpack match `0x27` (A0=A1=A2=0).
+| 1 | Arduino Nano | ATmega328P, 32KB Flash, 2KB SRAM, 16MHz | 1 | ₹250 | Main controller |
+| 2 | GSM Module SIM900A | Quad-band 850/900/1800/1900 MHz, UART, 4V supply | 1 | ₹700 | SMS payment verification |
+| 3 | BMS Module (3S) | 11.1V Li-ion, 10A, overcurrent + overvoltage + short circuit protection | 1 | ₹150 | Battery protection |
+| 4 | Solid State Relay | 5V control input, 24V DC / 10A output | 1 | ₹300 | Silent charging circuit control |
+| 5 | LM35 Temperature Sensor | 10mV/°C, −55°C to +150°C, TO-92 package | 1 | ₹30 | Cell temperature monitoring |
+| 6 | LCD 16×2 | HD44780 compatible, 5V, blue/green backlight | 1 | ₹80 | User status display |
+| 7 | 10kΩ Resistors | ¼W, 5% tolerance | 4 | ₹5 | Voltage divider (upper leg) + pull-ups |
+| 8 | 4.7kΩ Resistors | ¼W, 5% tolerance | 2 | ₹5 | Voltage divider (lower leg) |
+| 9 | 100nF Ceramic Capacitors | 0.1µF, 50V | 4 | ₹10 | Decoupling caps |
+| 10 | 10µF Electrolytic Capacitors | 16V | 2 | ₹10 | Power supply filtering |
+| 11 | 7805 Voltage Regulator | +5V, 1A, TO-220 package | 1 | ₹15 | 5V rail for Arduino and LCD |
+| 12 | 18650 Li-ion Cells | 3S configuration, ~11.1V nominal, 2000mAh | 3 | ₹600 | Simulated EV battery pack |
+| 13 | 12V 2A DC Adapter | Input: 230V AC, Output: 12V DC | 1 | ₹200 | Main power supply |
+| 14 | LED (Green, Red) | 5mm, through-hole | 2 | ₹10 | Status indicators |
+| 15 | Active Buzzer | 5V, 85dB, through-hole | 1 | ₹20 | Audio alerts |
+| 16 | SIM Card | Any 2G-enabled SIM (Jio/Airtel/BSNL) | 1 | ₹10 | GSM connectivity |
+| 17 | Breadboard | 830-point, full size | 1 | ₹100 | Prototyping |
+| 18 | Jumper Wires | M-M, M-F, F-F, 20cm | 1 set | ₹80 | Connections |
+| 19 | USB-A to Mini-USB cable | For Arduino programming | 1 | ₹50 | Firmware upload |
+| | **TOTAL** | | | **~₹2,625** | |
 
 ---
 
-## Circuit Schematic Description
+## Circuit Description
 
-A full schematic PDF is in `hardware/schematics/schematic.pdf`. The key sub-circuits are:
-
-### RFID Reader (MFRC522)
+### Power Supply Circuit
 
 ```
-ESP32 3.3V ──── VCC (MFRC522)
-ESP32 GND  ──── GND (MFRC522)
-GPIO 5     ──── SDA
-GPIO 18    ──── SCK
-GPIO 23    ──── MOSI
-GPIO 19    ──── MISO
-GPIO 2     ──── RST
-           (IRQ — leave unconnected for this project)
+230V AC → 12V DC Adapter → 7805 Regulator → 5V Rail → Arduino Nano + LCD
+                                          ↓
+                         4V Regulator / Buck Converter → GSM SIM900A
 ```
 
-**Important:** MFRC522 operates at **3.3V logic**. Do not connect to 5V pins. The ESP32 is 3.3V native — no level shifting required.
+The SIM900A **must not** be powered from the Arduino's 5V pin. The module draws up to 2A during GSM transmission, which will cause the Arduino to reset. A separate 4V supply (from a dedicated buck converter or a LiPo cell) is required.
+
+### Voltage Divider Circuit (Battery Voltage Sensing)
+
+The 3S Li-ion pack voltage ranges from 9.0V (discharged) to 12.6V (fully charged). The Arduino ADC operates at 0–5V. A voltage divider scales the pack voltage to the ADC range:
+
+```
+Pack+ ─── R1 (10kΩ) ─── A1 ─── R2 (4.7kΩ) ─── GND
+
+Scaling factor = R2 / (R1 + R2) = 4700 / 14700 = 0.3197
+
+Max ADC input at full charge = 12.6V × 0.3197 = 4.03V  (safely within 0–5V range)
+Min ADC input at discharge   = 9.0V  × 0.3197 = 2.88V
+
+ADC to voltage formula:
+  adc_val = analogRead(A1);
+  volt_divider_output = adc_val × (5.0 / 1024.0);
+  pack_voltage = volt_divider_output / 0.3197;
+```
+
+### LM35 Temperature Sensing
+
+LM35 outputs 10mV per °C, linear. Connected directly to Arduino A0:
+
+```
+VCC (5V) → LM35 pin 1
+GND       → LM35 pin 3
+Output    → A0
+
+temperature_C = (analogRead(A0) × 5.0 / 1024.0) × 100.0;
+```
+
+At 25°C: Output = 250mV → ADC = 51 → temp = 25.0°C.
+
+### SSR Control
+
+The SSR control signal is driven from Arduino D8:
+
+```
+D8 HIGH (5V) → SSR internal LED conducts → Triac/MOSFET turns ON → charging circuit closes
+D8 LOW (0V)  → SSR OFF → charging circuit opens
+```
+
+SSR provides galvanic isolation between the Arduino's 5V logic and the battery charging circuit.
+
+### GSM SIM900A UART Connection
+
+```
+Arduino D0 (RX via SoftwareSerial) → SIM900A TX
+Arduino D1 (TX via SoftwareSerial) → SIM900A RX
+SIM900A GND → Common GND
+SIM900A VCC → Dedicated 4V supply (separate from Arduino supply)
+```
+
+> **Note:** SoftwareSerial is used (pins D0/D1 in software, not hardware UART), so the hardware UART (USB) remains free for Serial.print() debugging during development.
 
 ---
 
-### INA219 (Power Sensor)
+## Arduino Nano Pin Assignment
 
-```
-ESP32 3.3V ──── VCC
-ESP32 GND  ──── GND
-GPIO 21    ──── SDA
-GPIO 22    ──── SCL
-Battery +  ──── VIN+ (IN+ on module)
-Relay Out+ ──── VIN- (IN- on module)
-```
-
-The INA219 measures current by sensing the voltage drop across an internal 0.1Ω shunt resistor. Place the INA219 **in series** on the positive charging line between the relay output and the battery pack positive terminal.
-
----
-
-### DS18B20 Temperature Sensors
-
-```
-DS18B20 (cell probe):
-  Red  (VDD) ──── 3.3V
-  Black (GND) ──── GND
-  Yellow (DQ) ──┬─ GPIO 4
-                └─ 4.7kΩ ──── 3.3V   ← pull-up required
-
-DS18B20 (ambient):
-  Red  (VDD) ──── 3.3V
-  Black (GND) ──── GND
-  Yellow (DQ) ──── GPIO 4  (same bus as cell probe)
-```
-
-Both DS18B20 sensors share the same 1-Wire bus (GPIO 4). Only one 4.7kΩ pull-up resistor is needed for the entire bus, not one per sensor.
+| Pin | Label | Direction | Connected To | Notes |
+|---|---|---|---|---|
+| D0 | RX (SW Serial) | IN | GSM SIM900A TX | SoftwareSerial |
+| D1 | TX (SW Serial) | OUT | GSM SIM900A RX | SoftwareSerial |
+| D2 | LCD RS | OUT | LCD pin 4 | Register Select |
+| D3 | LCD EN | OUT | LCD pin 6 | Enable |
+| D4 | LCD D4 | OUT | LCD pin 11 | Data bit 4 |
+| D5 | LCD D5 | OUT | LCD pin 12 | Data bit 5 |
+| D6 | LCD D6 | OUT | LCD pin 13 | Data bit 6 |
+| D7 | LCD D7 | OUT | LCD pin 14 | Data bit 7 |
+| D8 | SSR_CTRL | OUT | SSR IN | HIGH = Relay ON |
+| D9 | LED_GREEN | OUT | Green LED + 220Ω | Session active indicator |
+| D10 | LED_RED | OUT | Red LED + 220Ω | Fault indicator |
+| D11 | BUZZER | OUT | Active buzzer | Audio alert |
+| A0 | TEMP_ADC | IN | LM35 output | Temperature reading |
+| A1 | VOLT_ADC | IN | Voltage divider output | Battery voltage |
+| 5V | VCC | PWR | Arduino onboard regulator | Powers LCD, LM35, SSR |
+| GND | GND | PWR | Common ground | All modules |
 
 ---
 
-### Relay Module (Charging Circuit Control)
+## BMS Module Details
 
-```
-Relay Module:
-  VCC ──── ESP32 5V
-  GND ──── ESP32 GND
-  IN  ──── GPIO 26
+The commercial 3S BMS module provides **hardware-level** protection independent of Arduino firmware:
 
-  COM (relay common) ──── TP4056 charging output positive
-  NO  (normally open) ──── Battery pack positive terminal
-```
+| Protection | Threshold | Action |
+|---|---|---|
+| Overcharge protection | 4.20V per cell (12.60V total) | Disconnects charge MOSFET |
+| Over-discharge protection | 2.75V per cell (8.25V total) | Disconnects discharge MOSFET |
+| Overcurrent protection | Typically 10A (module specific) | Disconnects load |
+| Short circuit protection | Instantaneous (microseconds) | Disconnects immediately |
+| Cell balancing | Passive balancing via bypass resistors | Equalizes cell voltages |
 
-When GPIO 26 is HIGH, the relay closes, connecting the charger to the battery. The relay module has a built-in flyback diode and transistor driver — no external components needed.
-
----
-
-### LCD 20×4 with I2C Backpack
-
-```
-LCD + PCF8574 backpack:
-  VCC ──── 5V
-  GND ──── GND
-  SDA ──── GPIO 21
-  SCL ──── GPIO 22
-```
-
-The LCD requires 5V for the display panel but the PCF8574 I2C interface is 3.3V/5V compatible. On most clone modules, the I2C lines are pulled up to 5V — this is within the ESP32's absolute maximum rating (5V tolerant on most GPIO pins, but check your specific ESP32 board datasheet before connecting).
+The BMS module sits **between the Arduino-controlled SSR and the battery pack** in the charging current path, providing a fail-safe even if the Arduino firmware fails to act.
 
 ---
 
-## Power Budget
+## Prototype Assembly Notes
 
-| Module | VCC | Typical Current | Peak Current |
-|---|---|---|---|
-| ESP32 (Wi-Fi active) | 3.3V | 80 mA | 240 mA |
-| MFRC522 | 3.3V | 13 mA | 26 mA |
-| INA219 | 3.3V | 1 mA | 1 mA |
-| DS18B20 × 2 | 3.3V | 2 mA | 2 mA |
-| LCD + backlight | 5V | 30 mA | 50 mA |
-| Relay coil | 5V | 70 mA | 90 mA |
-| Buzzer | 5V | 30 mA | 30 mA |
-| LEDs × 2 | 3.3V | 10 mA | 10 mA |
-| **Total** | | **≈ 236 mA** | **≈ 449 mA** |
-
-A 5V 3A USB power adapter provides 3000 mA — well above the 449 mA peak. The margin covers inrush and USB cable voltage drop.
+1. Wire all GND connections first (common ground for Arduino, LCD, LM35, voltage divider, BMS, SSR)
+2. Power SIM900A from dedicated supply — connect after everything else is verified
+3. Verify voltage divider output at A1 with multimeter before powering Arduino
+4. Test LM35 reading first with a Serial.print before connecting LCD
+5. Test SSR control with an LED before connecting battery pack
+6. Insert SIM card before powering SIM900A
+7. Power sequence: Arduino → LCD → LM35 → Voltage divider → SSR → BMS → GSM
 
 ---
 
-## Hardware Assembly Notes
+## Circuit Schematic
 
-1. Build and test each module independently before connecting everything.
-2. Use the I2C scanner sketch (`examples/Wire/i2c_scanner`) to verify INA219 (`0x40`) and LCD (`0x27`) addresses before flashing the main firmware.
-3. Before connecting the battery pack, verify relay polarity with a multimeter in continuity mode — ensure the relay is open (no connection between COM and NO) when the ESP32 is unpowered.
-4. The 18650 cells must be pre-charged to at least 3.0V/cell before use. Deeply discharged Li-ion cells may not be recoverable by the TP4056.
-5. Never short the battery pack terminals — always add a main fuse (500mA fast-blow) in series with the positive terminal during development.
+See `images/diagrams/` for schematic diagram images. Key connections:
+
+```
+[12V Adapter] → [7805 Regulator] → 5V → [Arduino Nano] → [LCD, LEDs, Buzzer, SSR]
+                                       → [LM35 A0]
+                                       → [Voltage Divider A1]
+[Separate 4V Supply] → [SIM900A VCC]
+[SIM900A TX/RX] ←→ [Arduino D0/D1 SoftwareSerial]
+[Arduino D8] → [SSR IN] → [SSR OUT] → [Battery Pack Positive]
+[Battery Pack] → [BMS Module] → [SSR load side]
+```

@@ -1,127 +1,158 @@
-# Working Principle
+# Working Principle — Smart EV Charging Station with BMS
 
 ## Overview
 
-The system operates as a finite state machine running on the ESP32. There are four stable states: **IDLE**, **CHARGING**, **FULL**, and **FAULT**. All transitions are event-driven — either by an RFID card tap or by a sensor threshold breach.
+The Smart EV Charging Station operates as a five-stage process: system initialization, payment verification via GSM SMS, pre-charge safety validation, active charging with continuous monitoring, and session termination. Each stage is controlled by the Arduino Nano state machine.
 
 ---
 
-## State-by-State Breakdown
+## Stage 1 — System Initialization
 
-### 1. IDLE
+On power-on, the Arduino Nano:
+1. Initializes all GPIO pins (SSR, LEDs, buzzer as outputs; ADC channels as inputs)
+2. Starts the 16×2 LCD and displays "Initializing..."
+3. Initializes SoftwareSerial for GSM SIM900A communication at 9600 baud
+4. Sends AT commands to verify GSM module is responsive (`AT` → expect `OK`)
+5. Configures GSM for SMS text mode: `AT+CMGF=1`
+6. Reads LM35 temperature as baseline
+7. Reads voltage divider ADC for initial battery voltage
+8. Transitions to IDLE state; LCD displays "Awaiting Payment"
 
-The system waits for a card tap. The LCD shows "Tap card to start." The relay is open, so no power flows to the EV port. MQTT telemetry is not published in this state to conserve broker bandwidth.
+---
 
-### 2. Authentication (transition)
+## Stage 2 — Payment Verification (GSM SMS Flow)
 
-When a card is detected on the MFRC522, the ESP32 reads the 4-byte UID over SPI. The UID is compared byte-by-byte against up to four stored UIDs in EEPROM (address 0–15). If there is no match, the buzzer fires one long beep and the LCD shows "Access Denied" for 2 seconds before returning to IDLE. If there is a match, the system transitions to CHARGING.
+This is the core differentiator. The system does not require internet connectivity — it uses GSM 2G SMS:
 
-### 3. CHARGING
+1. **User initiates payment:** The EV user opens any UPI app (Google Pay, PhonePe, Paytm) and sends a payment to the station's registered mobile number.
+2. **SMS delivery:** The UPI app's bank sends an SMS confirmation to the station SIM: `"Payment of Rs 50 received from XXXX@upi. Reference: 1234567890."`
+3. **Arduino polls GSM:** Every 5 seconds, the Arduino sends `AT+CMGL="ALL"` to SIM900A and reads the response buffer.
+4. **SMS parsing:** The response is searched for payment-indicative keywords: `"received"`, `"credited"`, `"Payment"`, `"Rs"`. The amount is extracted using string parsing.
+5. **Validation:** Amount is compared against the minimum configured payment threshold (e.g., ₹10 minimum).
+6. **Authorization:** If valid, charging duration is calculated: `duration_min = (amount / RATE_PER_UNIT) × 60`
+7. **Cleanup:** Processed SMS is deleted with `AT+CMGD=1,4` to prevent re-triggering.
 
-On entering CHARGING:
-- The relay closes (GPIO 26 goes HIGH), connecting the TP4056 charging module output to the battery pack terminals.
-- `bms.resetSession()` clears the energy integrator and sets the session start timestamp.
-- `payment.startSession(uid)` records the user UID and start time.
-- A `session_start` MQTT event is published.
+---
 
-Every `SENSOR_POLL_INTERVAL_MS` (1000 ms):
-1. **INA219** measures bus voltage (pack voltage) and current via I2C.
-2. **DS18B20** sensors are requested and read over 1-Wire (takes ~750 ms for 12-bit conversion; triggered in the previous cycle).
-3. **SOC** is estimated using a 10-point voltage lookup table with linear interpolation between breakpoints.
-4. **Energy integration**: `ΔE = P × Δt`, where `P = V × I` (watts) and `Δt` is the time elapsed since the last poll (in hours). This is accumulated in `_sessionEnergyWh`.
-5. **Fault checks** are run on every reading (see below).
+## Stage 3 — Pre-Charge Safety Check
 
-Every `MQTT_PUBLISH_INTERVAL_MS` (5000 ms), a JSON telemetry payload is published to `ev/telemetry`:
+Before the SSR is activated, the controller runs a safety preflight:
 
-```json
-{
-  "uid": "A1B2C3D4",
-  "voltage": 11.94,
-  "current": 0.842,
-  "power_w": 10.05,
-  "energy_wh": 2.34,
-  "soc": 73.2,
-  "temp_c": 32.1,
-  "elapsed_s": 837
+```
+IF battery voltage > VOLT_MAX_THRESHOLD → FAULT (Overvoltage)
+IF battery temperature > TEMP_MAX_THRESHOLD → FAULT (Overtemperature)
+IF BMS fault signal active → FAULT (BMS hardware fault)
+ELSE → Proceed to charging
+```
+
+This ensures the SSR only closes when all conditions are safe. The BMS module provides a secondary hardware-level check independent of the Arduino software.
+
+---
+
+## Stage 4 — Active Charging with Continuous Monitoring
+
+Once the SSR activates:
+
+1. **Charging begins:** SSR HIGH → current flows from supply through BMS to battery pack.
+2. **Sensor polling (every 2 seconds):**
+   - LM35: `temperature_C = (analogRead(A0) × 5.0 / 1024.0) × 100`
+   - Voltage: `pack_voltage = analogRead(A1) × (5.0 / 1024.0) × VOLTAGE_DIVIDER_RATIO`
+3. **SOC estimation:** Pack voltage is mapped to SOC% using a Li-ion voltage-SOC lookup table (voltage curve approximation for 3S configuration).
+4. **LCD update:** SOC%, voltage, temperature, and elapsed time are refreshed.
+5. **Safety monitoring:** Every cycle checks voltage and temperature against thresholds. On fault: SSR immediately goes LOW, buzzer sounds, LCD shows fault type.
+6. **Session timer:** Tracks elapsed seconds. When paid duration is exhausted, session ends automatically.
+
+---
+
+## Stage 5 — Session Termination
+
+Session ends when any of these conditions is true:
+- Battery voltage reaches full charge threshold (4.20V/cell = 12.6V for 3S)
+- Estimated SOC reaches 100%
+- Pre-paid session duration elapses
+- A safety fault is triggered
+
+On termination:
+1. SSR LOW (charging stops immediately)
+2. Session summary calculated: energy ≈ `power_avg × time_hours`
+3. LCD displays: "Session Complete / Energy: X.X Wh / Duration: XX min"
+4. Record saved to EEPROM
+5. System returns to IDLE
+
+---
+
+## Charging Algorithm Detail
+
+```
+// SOC estimation via voltage-SOC lookup table (3S Li-ion)
+float voltToSOC(float v) {
+    // Voltage (3S pack) → SOC mapping
+    if (v >= 12.60) return 100.0;
+    if (v >= 12.30) return 90.0;
+    if (v >= 12.00) return 75.0;
+    if (v >= 11.70) return 60.0;
+    if (v >= 11.40) return 45.0;
+    if (v >= 11.10) return 30.0;
+    if (v >= 10.80) return 15.0;
+    if (v >= 9.00)  return 5.0;
+    return 0.0;
 }
 ```
 
-### 4. FULL
-
-When SOC reaches 100% (cell voltage ≥ 4.20V/cell), the relay opens automatically. The buzzer plays 3 short beeps. The final bill is calculated and displayed on the LCD for 10 seconds, then the system returns to IDLE. A `session_end` MQTT event is published with energy and cost.
-
-### 5. FAULT
-
-A fault is triggered if any of the following occur during CHARGING:
-- **Overvoltage (OVP):** pack voltage / cell count > 4.25V
-- **Overtemperature (OTP):** DS18B20 reading > 45°C
-- **Overcurrent (OCP):** INA219 current > 4.5A
-
-On fault:
-- Relay opens immediately.
-- Buzzer fires 3 long beeps.
-- The red LED turns on.
-- Fault reason string is displayed on the LCD ("OTP: 46.2C", etc.).
-- A `fault` MQTT event is published.
-- The system waits in FAULT state until a registered card is tapped to acknowledge and reset.
+The lookup table approach is used because coulomb counting requires current sensing hardware not included in this prototype. For a 3S Li-ion pack, the voltage-SOC relationship is reasonably predictable.
 
 ---
 
-## SOC Estimation Method
+## Failure Scenarios
 
-SOC is estimated using a **voltage-SOC lookup table** derived from a typical 18650 Li-ion discharge curve at 0.5C. The table has 10 breakpoints from 3.00V (0%) to 4.20V (100%) per cell. Between breakpoints, linear interpolation is used.
-
-**Limitation:** Voltage-based SOC is accurate only at low C-rates and with a settled (rested) battery. During active charging, the measured voltage includes an IR drop and is higher than the open-circuit voltage. This means SOC may be slightly over-estimated during charging. For a diploma project, this is an acceptable approximation. A production BMS would use coulomb counting as the primary method with voltage as a calibration reset point.
-
----
-
-## Payment Calculation
-
-```
-Energy (kWh) = accumulated_energy_Wh / 1000
-Cost (₹)     = Energy (kWh) × unit_rate (₹/kWh)
-```
-
-The unit rate is set in `config.h` (default: ₹8.00/kWh, which is a typical state electricity board commercial tariff). The cost is stored in EEPROM as an unsigned 16-bit integer in paise (1/100 of a Rupee) to avoid floating-point in EEPROM writes.
-
----
-
-## EEPROM Layout
-
-| Address Range | Content |
-|---|---|
-| 0 – 15 | Four 4-byte user UIDs (16 bytes total) |
-| 16 – 19 | Reserved |
-| 20 – 499 | 20 session log entries × 24 bytes each |
-
-Session log entry (24 bytes):
-| Offset | Size | Content |
+| Failure | Detection | Response |
 |---|---|---|
-| 0 | 4 B | First 4 chars of UID |
-| 4 | 2 B | Energy in Wh (uint16) |
-| 6 | 2 B | Cost in paise (uint16) |
-| 8 | 4 B | Duration in seconds (uint32) |
-| 12 | 12 B | Reserved / padding |
+| GSM module not responding | `AT` command returns no `OK` within timeout | LCD: "GSM Fail"; System stays IDLE; retries every 30 sec |
+| SMS not received | No payment SMS after 5 minutes | No action (system stays IDLE) |
+| Overtemperature during charge | LM35 reading > `TEMP_CUTOFF_C` | SSR OFF immediately; LCD: "TEMP FAULT"; buzzer; wait for cool-down |
+| Overvoltage | Pack voltage > `VOLT_MAX` | SSR OFF; LCD: "OV FAULT"; BMS hardware also trips |
+| BMS hardware trip | BMS disconnects load externally | SSR already off (BMS acts independently of Arduino) |
+| Power interruption | — | EEPROM retains last session log; LCD re-initializes on power restore |
+| SMS parse failure | Keywords not found in SMS text | SMS deleted; LCD: "Invalid Payment"; system stays IDLE |
 
 ---
 
-## Dashboard Data Flow
+## GSM AT Command Sequence
 
 ```
-ESP32 → (Wi-Fi) → MQTT Broker (Mosquitto) → (subscribe) → Flask app
-                                                              ↓
-                                                         SQLite DB
-                                                              ↓
-                                              Browser → REST /api/* → Chart.js
-```
+// Initialization
+AT                    → OK
+AT+CMGF=1             → OK   (set SMS text mode)
+AT+CNMI=2,2,0,0,0     → OK   (route new SMS to serial immediately, optional)
 
-The Flask app runs two concurrent threads: the Flask HTTP server and the MQTT subscriber loop. MQTT messages are handled in the subscriber thread and written to SQLite. The browser polls `/api/live` every 5 seconds for the latest reading and `/api/history` for the chart dataset.
+// Poll for messages
+AT+CMGL="ALL"         → +CMGL: 1,"REC READ","XXXXXXXX",,"26/06/19,10:30:00+22"
+                         "Payment of Rs 50 received from user@upi..."
+                         OK
+
+// Delete processed message
+AT+CMGD=1,4           → OK   (delete all read messages)
+
+// Send reply SMS (optional)
+AT+CMGS="+91XXXXXXXXXX"  → >  (type message)
+Charging started. Station EV-01\x1A  (Ctrl+Z to send)
+                       → +CMGS: 1
+                         OK
+```
 
 ---
 
-## Known Limitations (Prototype)
+## Power Budget
 
-1. The TP4056 module used for demonstration charges at a maximum of 1A. Real EV charging operates at much higher currents (7A for AC Level 1, 32A+ for AC Level 2) and would require dedicated EVSE hardware with proper safety certifications.
-2. The DS18B20 is measuring ambient and approximate cell-pack temperature, not individual cell temperature. A production BMS would use a thermistor per cell.
-3. EEPROM on the ESP32 has ~100,000 write cycles. At 20 sessions per slot, this gives a lifetime of ~5 million sessions before wear, which is sufficient for a prototype.
-4. The MQTT connection is unauthenticated. A production deployment must use TLS and username/password or certificate-based auth.
+| Component | Typical Current | Notes |
+|---|---|---|
+| Arduino Nano | ~20 mA | Running at 16MHz, all peripherals active |
+| LCD (backlight ON) | ~20 mA | With backlight; ~5mA without |
+| LM35 | ~0.06 mA | Negligible |
+| GSM SIM900A (idle) | ~10 mA | Spikes to 2A during TX burst |
+| GSM SIM900A (TX) | Up to 2A peak | Requires dedicated 4V / 2A supply |
+| SSR (control coil) | ~15 mA | 5V control signal |
+| LEDs | ~10 mA total | Two status LEDs |
+| **Total (controller side)** | **~75 mA steady** | Excluding GSM TX burst |
+
+> **Critical:** GSM SIM900A must be powered from a **separate 4V / 2A supply** — not from the Arduino 5V pin, which cannot deliver the 2A burst current required during SMS transmission.
