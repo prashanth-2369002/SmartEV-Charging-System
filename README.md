@@ -14,6 +14,12 @@
 
 *Selected and presented at State-Level Technical Exhibition*
 
+<br>
+
+![Smart EV Charging Station Prototype](assets/screenshots/smart-ev-charging-prototype.jpg)
+
+*Physical prototype: Arduino Nano (center-left) • GSM SIM900A (blue board, bottom) • 16×2 LCD display (active) • 3S BMS module (bottom-right, XT60 connector) • SSR charging control • LM35 temperature sensor — fully wired on perfboard and demonstrated live at state-level exhibition.*
+
 </div>
 
 ---
@@ -26,6 +32,7 @@
 - [Features](#features)
 - [Working Flow](#working-flow)
 - [Hardware Components](#hardware-components)
+  - [Hardware Prototype](#hardware-prototype)
 - [Technical Specifications](#technical-specifications)
 - [GSM Communication Flow](#gsm-communication-flow)
 - [Battery Safety Logic](#battery-safety-logic)
@@ -213,6 +220,15 @@ flowchart TD
 ---
 
 ## Hardware Components
+
+### Hardware Prototype
+
+![Smart EV Charging Station — Hardware Prototype](assets/screenshots/smart-ev-charging-prototype.jpg)
+
+**Physical prototype assembled on perfboard and demonstrated at State-Level Technical Exhibition.**
+All major components are visible: Arduino Nano (main controller), GSM SIM900A (blue board with SIM slot), 16×2 LCD display (showing live readings), 3S BMS protection module (bottom-right, XT60 battery connector), Schneider MCB circuit breaker (top-right, safety isolation), LM35 temperature sensor, and the SSR-controlled charging circuit. The Jio SIM-based power adapter (top-left) powers the 2G network modem during live demonstration.
+
+### Component List
 
 | Component | Specification | Quantity | Purpose |
 |---|---|---|---|
