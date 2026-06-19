@@ -8,8 +8,10 @@
 #define CONFIG_H
 
 // ─── Pin Assignments ──────────────────────────────────────────────────────────
-#define PIN_GSM_RX        0    // SoftwareSerial RX (← SIM900A TX)
-#define PIN_GSM_TX        1    // SoftwareSerial TX (→ SIM900A RX)
+// D12/D13 used for SoftwareSerial so D0/D1 (hardware UART) stays free for
+// Serial.print() debug output over USB — do NOT move these to D0/D1.
+#define PIN_GSM_RX        12   // SoftwareSerial RX (← SIM900A TX)
+#define PIN_GSM_TX        13   // SoftwareSerial TX (→ SIM900A RX)
 
 #define PIN_LCD_RS        2
 #define PIN_LCD_EN        3

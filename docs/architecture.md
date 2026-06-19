@@ -67,7 +67,7 @@ graph LR
 
     ADC --> VREAD[Voltage Reading - A1 Pack Voltage]
     ADC --> TREAD[Temperature Reading - A0 LM35]
-    UART --> GSM_IF[SoftwareSerial D0/D1 to SIM900A]
+    UART --> GSM_IF[SoftwareSerial D12/D13 to SIM900A]
     GPIO --> LCD_IF[LCD Interface D2-D7 to HD44780]
     GPIO --> SSR_IF[SSR Control D8 to Relay IN]
     GPIO --> LED_IF[Status LEDs D9 Green / D10 Red]

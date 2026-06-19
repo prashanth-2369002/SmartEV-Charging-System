@@ -1,24 +1,30 @@
-# Screenshots
+# Screenshots — Smart EV Charging Station with BMS
 
-Place your actual screenshot images in this folder. The filenames below match the references in the main `README.md`.
+Place your actual prototype photographs in this folder. The filenames below are suggested names for use when embedding images in the README.
 
-## Required Screenshots
+## Recommended Photographs
 
 | Filename | Description | How to capture |
 |---|---|---|
-| `dashboard_home.png` | Dashboard homepage showing SOC gauge, live voltage, current, and temperature cards | Open `http://localhost:5000` in browser, take a full-page screenshot |
-| `session_active.png` | Active charging session with the real-time power graph updating | Start a session (or run the MQTT simulator), screenshot after ~30 seconds of data |
-| `payment_history.png` | Payment and session history table with at least 3–4 completed sessions | Complete a few simulated sessions, then screenshot the history table |
-| `lcd_display.jpg` | Photo of the physical LCD display during an active charging session showing SOC, voltage, and timer | Photograph the hardware with good lighting |
-| `hardware_setup.jpg` | Bird's-eye photo of the full breadboard prototype | Photograph from above with all components visible and labelled |
+| `prototype_overview.jpg` | Full breadboard setup — all components visible: Arduino Nano, SIM900A, BMS, SSR, LM35, LCD | Photograph from above with good lighting; label components with small sticky tags |
+| `lcd_idle.jpg` | LCD showing "EV Charger Ready / Send UPI Payment" | Close-up, angle lamp to avoid glare on LCD surface |
+| `lcd_charging.jpg` | LCD showing live SOC, voltage, temperature, and timer during a charging session | Capture while system is actively charging |
+| `lcd_complete.jpg` | LCD showing "Session Complete / SOC:98% 22min" at end of session | Capture immediately after SSR turns off |
+| `lcd_fault.jpg` | LCD showing "! FAULT ! / Overtemperature" during a thermal test | Warm LM35 gently with hand to trigger cutoff, then photograph |
+| `gsm_sim900a.jpg` | SIM900A module close-up with SIM card inserted and antenna visible | Macro/portrait mode on phone for close detail |
+| `bms_module.jpg` | 3S BMS protection module showing cell connection pads | Close-up with module highlighted |
+| `ssr_relay.jpg` | SSR with control wire (from D8) and load wires labeled | Annotate with small paper labels |
+| `payment_demo.jpg` | Phone screen showing UPI payment confirmation SMS | Screenshot via phone, crop to SMS notification |
+| `state_exhibition.jpg` | Project at state-level technical exhibition (judges reviewing prototype) | Photograph during the event |
 
-## Screenshot Tips
+## Photo Tips
 
-- Use **1280 × 720** or **1920 × 1080** resolution for dashboard screenshots
-- Crop to the relevant area — avoid capturing browser chrome / OS taskbar
-- For dark-mode dashboard screenshots, no extra setup needed (dashboard is already dark-themed)
-- Name files exactly as listed above — the README.md `![alt](assets/screenshots/filename.png)` references these exact paths
+- Shoot in **landscape orientation** for prototype overview shots
+- Use **1200 × 900 px minimum** resolution
+- Natural light or diffused LED panel — avoid direct flash (creates glare on LCD)
+- LCD close-up: **angle the camera slightly** rather than shooting head-on to reduce surface reflections
+- Name files exactly as listed — use these names when referencing in README.md
 
-## Placeholder
+## Until Photos Are Available
 
-Until real screenshots are taken, the README will show broken image icons. This is normal for a work-in-progress repository. Recruiters understand that hardware project screenshots require physical setup.
+Broken image icons in the README are expected until prototype photos are uploaded. Add them here and update the README image links to point to `assets/screenshots/filename.jpg`.

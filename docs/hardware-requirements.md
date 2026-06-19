@@ -85,13 +85,13 @@ SSR provides galvanic isolation between the Arduino's 5V logic and the battery c
 ### GSM SIM900A UART Connection
 
 ```
-Arduino D0 (RX via SoftwareSerial) → SIM900A TX
-Arduino D1 (TX via SoftwareSerial) → SIM900A RX
+Arduino D12 (SoftwareSerial RX) ← SIM900A TX
+Arduino D13 (SoftwareSerial TX) → SIM900A RX
 SIM900A GND → Common GND
 SIM900A VCC → Dedicated 4V supply (separate from Arduino supply)
 ```
 
-> **Note:** SoftwareSerial is used (pins D0/D1 in software, not hardware UART), so the hardware UART (USB) remains free for Serial.print() debugging during development.
+> **Note:** SoftwareSerial is assigned to D12/D13, keeping D0/D1 (hardware UART) free for `Serial.print()` debug output via USB. Never use D0/D1 for SoftwareSerial while also using `Serial.begin()` — they are the same physical pins and will conflict, causing garbled output from both the debug monitor and the GSM module.
 
 ---
 
@@ -99,8 +99,8 @@ SIM900A VCC → Dedicated 4V supply (separate from Arduino supply)
 
 | Pin | Label | Direction | Connected To | Notes |
 |---|---|---|---|---|
-| D0 | RX (SW Serial) | IN | GSM SIM900A TX | SoftwareSerial |
-| D1 | TX (SW Serial) | OUT | GSM SIM900A RX | SoftwareSerial |
+| D0 | Hardware RX | IN | USB (debug only) | Do NOT connect GSM here |
+| D1 | Hardware TX | OUT | USB (debug only) | Do NOT connect GSM here |
 | D2 | LCD RS | OUT | LCD pin 4 | Register Select |
 | D3 | LCD EN | OUT | LCD pin 6 | Enable |
 | D4 | LCD D4 | OUT | LCD pin 11 | Data bit 4 |
@@ -111,6 +111,8 @@ SIM900A VCC → Dedicated 4V supply (separate from Arduino supply)
 | D9 | LED_GREEN | OUT | Green LED + 220Ω | Session active indicator |
 | D10 | LED_RED | OUT | Red LED + 220Ω | Fault indicator |
 | D11 | BUZZER | OUT | Active buzzer | Audio alert |
+| D12 | GSM_RX (SW) | IN | SIM900A TX | SoftwareSerial receive |
+| D13 | GSM_TX (SW) | OUT | SIM900A RX | SoftwareSerial transmit |
 | A0 | TEMP_ADC | IN | LM35 output | Temperature reading |
 | A1 | VOLT_ADC | IN | Voltage divider output | Battery voltage |
 | 5V | VCC | PWR | Arduino onboard regulator | Powers LCD, LM35, SSR |
@@ -155,7 +157,7 @@ See `images/diagrams/` for schematic diagram images. Key connections:
                                        → [LM35 A0]
                                        → [Voltage Divider A1]
 [Separate 4V Supply] → [SIM900A VCC]
-[SIM900A TX/RX] ←→ [Arduino D0/D1 SoftwareSerial]
+[SIM900A TX/RX] ←→ [Arduino D12/D13 SoftwareSerial]
 [Arduino D8] → [SSR IN] → [SSR OUT] → [Battery Pack Positive]
 [Battery Pack] → [BMS Module] → [SSR load side]
 ```

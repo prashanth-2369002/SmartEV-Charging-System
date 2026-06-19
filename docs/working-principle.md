@@ -29,7 +29,7 @@ This is the core differentiator. The system does not require internet connectivi
 3. **Arduino polls GSM:** Every 5 seconds, the Arduino sends `AT+CMGL="ALL"` to SIM900A and reads the response buffer.
 4. **SMS parsing:** The response is searched for payment-indicative keywords: `"received"`, `"credited"`, `"Payment"`, `"Rs"`. The amount is extracted using string parsing.
 5. **Validation:** Amount is compared against the minimum configured payment threshold (e.g., ₹10 minimum).
-6. **Authorization:** If valid, charging duration is calculated: `duration_min = (amount / RATE_PER_UNIT) × 60`
+6. **Authorization:** If valid, charging duration is calculated in seconds: `duration_sec = (amount / RATE_PER_UNIT_RS) × 3600`
 7. **Cleanup:** Processed SMS is deleted with `AT+CMGD=1,4` to prevent re-triggering.
 
 ---
@@ -39,13 +39,12 @@ This is the core differentiator. The system does not require internet connectivi
 Before the SSR is activated, the controller runs a safety preflight:
 
 ```
-IF battery voltage > VOLT_MAX_THRESHOLD → FAULT (Overvoltage)
-IF battery temperature > TEMP_MAX_THRESHOLD → FAULT (Overtemperature)
-IF BMS fault signal active → FAULT (BMS hardware fault)
+IF battery voltage > VOLT_OVERVOLT_SW (12.65V) → FAULT (Overvoltage)
+IF battery temperature > TEMP_CUTOFF_C (45°C)  → FAULT (Overtemperature)
 ELSE → Proceed to charging
 ```
 
-This ensures the SSR only closes when all conditions are safe. The BMS module provides a secondary hardware-level check independent of the Arduino software.
+This ensures the SSR only closes when all software-monitored conditions are safe. The BMS module provides an **independent hardware-level** fail-safe (overcurrent, short-circuit, cell overvoltage) that operates entirely outside Arduino control — it will trip the charging MOSFET even if the firmware fails to respond.
 
 ---
 
@@ -56,7 +55,7 @@ Once the SSR activates:
 1. **Charging begins:** SSR HIGH → current flows from supply through BMS to battery pack.
 2. **Sensor polling (every 2 seconds):**
    - LM35: `temperature_C = (analogRead(A0) × 5.0 / 1024.0) × 100`
-   - Voltage: `pack_voltage = analogRead(A1) × (5.0 / 1024.0) × VOLTAGE_DIVIDER_RATIO`
+   - Voltage: `adc_v = analogRead(A1) × (5.0 / 1024.0)` → `pack_voltage = adc_v / VDIV_SCALE_FACTOR` (divide to reverse the divider)
 3. **SOC estimation:** Pack voltage is mapped to SOC% using a Li-ion voltage-SOC lookup table (voltage curve approximation for 3S configuration).
 4. **LCD update:** SOC%, voltage, temperature, and elapsed time are refreshed.
 5. **Safety monitoring:** Every cycle checks voltage and temperature against thresholds. On fault: SSR immediately goes LOW, buzzer sounds, LCD shows fault type.

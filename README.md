@@ -235,8 +235,8 @@ flowchart TD
 
 | Arduino Nano Pin | Connected To | Type |
 |---|---|---|
-| D0 (RX) | GSM SIM900A TX | UART RX (Software Serial) |
-| D1 (TX) | GSM SIM900A RX | UART TX (Software Serial) |
+| D0 (RX) | USB / Serial monitor | Hardware UART RX (debug only) |
+| D1 (TX) | USB / Serial monitor | Hardware UART TX (debug only) |
 | D2 | LCD RS | Digital OUT |
 | D3 | LCD Enable | Digital OUT |
 | D4–D7 | LCD D4–D7 | Digital OUT |
@@ -244,6 +244,8 @@ flowchart TD
 | D9 | Status LED (Green) | Digital OUT |
 | D10 | Alert LED (Red) | Digital OUT |
 | D11 | Buzzer | Digital OUT |
+| D12 | GSM SIM900A TX | SoftwareSerial RX |
+| D13 | GSM SIM900A RX | SoftwareSerial TX |
 | A0 | LM35 Output | Analog IN (ADC) |
 | A1 | Voltage Divider Output | Analog IN (ADC) |
 | 5V / GND | All module VCC/GND | Power |
@@ -258,7 +260,7 @@ flowchart TD
 | Flash / SRAM | 32 KB / 2 KB |
 | GSM Module | SIM900A (Quad-band 2G) |
 | GSM Interface | SoftwareSerial @ 9600 baud |
-| Voltage Sensing Range | 0 – 16.8V (3S Li-ion full charge) |
+| Voltage Sensing Range | 9.0V – 12.6V (3S Li-ion operating range; ADC limit ≈ 15.6V) |
 | ADC Resolution | 10-bit (1024 steps, 4.88mV/step) |
 | Voltage Divider Ratio | 0.32× (R1=10kΩ, R2=4.7kΩ) |
 | Temperature Range | 0°C – 85°C (LM35 operating range used) |
@@ -267,7 +269,7 @@ flowchart TD
 | SSR Control Logic | 5V HIGH = relay ON (active HIGH) |
 | Sensor Poll Interval | 2000 ms |
 | LCD Update Interval | 2000 ms |
-| EEPROM Session Records | Up to 50 sessions (Arduino Nano EEPROM = 1KB) |
+| EEPROM Session Records | Up to 90 sessions (ring buffer, 11 bytes/record in 1KB EEPROM) |
 | Battery Chemistry | Li-ion 18650 (3S configuration) |
 | Nominal Pack Voltage | 11.1V (3S) |
 | Charging Cutoff Voltage | 12.6V (4.2V × 3 cells) |
@@ -330,30 +332,26 @@ flowchart TD
 
     T_CHECK -->|YES| OT_FAULT[OVERTEMP FAULT\nSSR OFF immediately\nLCD: TEMP FAULT\nBuzzer Alert]
 
-    T_CHECK -->|NO| I_CHECK{BMS Overcurrent\nSignal?}
-
-    I_CHECK -->|YES| OC_FAULT[OVERCURRENT FAULT\nBMS Module Trips\nSSR OFF\nLCD: OC FAULT]
-
-    I_CHECK -->|NO| SAFE[All Parameters OK\nContinue Charging]
+    T_CHECK -->|NO| SAFE[All SW Checks Pass\nContinue Charging]
 
     SAFE --> SOC_EST[Estimate SOC\nfrom Voltage Curve]
-    SOC_EST --> FULL_CHECK{SOC ≥ 100%?}
+    SOC_EST --> FULL_CHECK{SOC >= 98%?}
 
     FULL_CHECK -->|YES| CHARGE_DONE[Charging Complete\nSSR OFF\nLog Session]
     FULL_CHECK -->|NO| READ
 
     OV_FAULT --> WAIT{Voltage drops\nbelow threshold?}
     OT_FAULT --> WAIT2{Temperature\ncools down?}
-    OC_FAULT --> WAIT3{Manual reset?}
     WAIT -->|YES| READ
     WAIT2 -->|YES| READ
-    WAIT3 -->|YES| READ
+
+    BMS_HW[BMS Hardware Module\nIndependent Overcurrent\nand Short-Circuit Protection]
 
     style OV_FAULT fill:#f44336,color:#fff
     style OT_FAULT fill:#f44336,color:#fff
-    style OC_FAULT fill:#f44336,color:#fff
     style SAFE fill:#4CAF50,color:#fff
     style CHARGE_DONE fill:#2196F3,color:#fff
+    style BMS_HW fill:#9C27B0,color:#fff
 ```
 
 ---
@@ -458,12 +456,12 @@ SmartEV-Charging-System/
 ├── CODE_OF_CONDUCT.md                 # Code of conduct
 │
 ├── docs/
-│   ├── Architecture.md                # System architecture deep-dive
-│   ├── Working_Principle.md           # How the system works
-│   ├── Hardware_Design.md             # BOM, circuit, pin mapping
+│   ├── architecture.md                # System architecture deep-dive
+│   ├── working-principle.md           # How the system works
+│   ├── hardware-requirements.md       # BOM, circuit, pin mapping
 │   ├── BMS_Design.md                  # Battery management documentation
 │   ├── GSM_Integration.md             # GSM AT commands and payment flow
-│   ├── Future_Improvements.md         # Detailed future scope
+│   ├── future-improvements.md         # Detailed future scope
 │   ├── version_2_roadmap.md           # V2–V6 engineering roadmap
 │   ├── demo_storyboard.md             # Demo GIF storyboard
 │   └── banner_concept.md              # Repository banner design concept
@@ -471,11 +469,10 @@ SmartEV-Charging-System/
 ├── firmware/
 │   └── arduino/
 │       └── smart_ev_charger/
-│           ├── smart_ev_charger.ino   # Main Arduino sketch
-│           ├── config.h               # Pin definitions and constants
-│           ├── bms.h / bms.cpp        # BMS logic and SOC estimation
-│           ├── gsm.h / gsm.cpp        # GSM SIM900A AT command handler
-│           └── payment.h / payment.cpp # Payment SMS parsing
+│           ├── smart_ev_charger.ino   # Main Arduino sketch (state machine)
+│           ├── config.h               # Pin definitions, thresholds, EEPROM layout
+│           ├── bms.h / bms.cpp        # Voltage + temp sensing, SOC estimation
+│           └── gsm.h / gsm.cpp        # SIM900A driver + UPI SMS parser
 │
 ├── images/
 │   ├── README.md                      # Image descriptions
@@ -494,12 +491,12 @@ SmartEV-Charging-System/
 
 | Document | Description |
 |---|---|
-| [Architecture](docs/Architecture.md) | System architecture, communication flows, design decisions |
-| [Working Principle](docs/Working_Principle.md) | Step-by-step operational flow |
-| [Hardware Design](docs/Hardware_Design.md) | BOM, circuit description, pin mapping |
+| [Architecture](docs/architecture.md) | System architecture, communication flows, design decisions |
+| [Working Principle](docs/working-principle.md) | Step-by-step operational flow |
+| [Hardware Requirements](docs/hardware-requirements.md) | BOM, circuit description, pin mapping |
 | [BMS Design](docs/BMS_Design.md) | Battery protection logic, SOC estimation, safety thresholds |
 | [GSM Integration](docs/GSM_Integration.md) | AT command sequences, SMS parsing, payment verification |
-| [Future Improvements](docs/Future_Improvements.md) | Detailed future scope analysis |
+| [Future Improvements](docs/future-improvements.md) | Detailed future scope analysis |
 | [Version 2 Roadmap](docs/version_2_roadmap.md) | V2–V6 engineering progression plan |
 | [Audit Report](AUDIT_REPORT.md) | Full project audit and engineering assessment |
 

@@ -44,8 +44,8 @@ Be respectful, constructive, and inclusive. This is an educational project — q
 
 Before opening an issue:
 1. Check existing [issues](../../issues) to avoid duplicates
-2. For firmware bugs, include your ESP32 board variant and Arduino core version
-3. For dashboard bugs, include Python version, OS, and the error traceback
+2. For firmware bugs, include your Arduino Nano board variant and Arduino IDE version
+3. Describe the hardware setup (GSM module connected, battery voltage, serial monitor output)
 
 **Issue template:**
 
@@ -62,9 +62,10 @@ What should happen.
 
 **Environment:**
 - OS:
-- Python version:
 - Arduino IDE version:
-- ESP32 core version:
+- Arduino Nano variant (ATmega328P / Old Bootloader):
+- USB chip on Nano (CH340 / FT232R / CP2102):
+- GSM module power supply voltage:
 ```
 
 ---
@@ -74,12 +75,7 @@ What should happen.
 1. **Fork** the repository
 2. **Create a branch** from `main` (see [Branch Naming](#branch-naming))
 3. **Make your changes** — one logical change per PR
-4. **Run tests** before submitting
-
-```bash
-cd tests
-pytest -v
-```
+4. **Verify your change** compiles clean in Arduino IDE (no errors or warnings) before submitting
 
 5. **Commit** with a clear message (see [Commit Message Format](#commit-message-format))
 6. **Open a Pull Request** against `main`
@@ -109,22 +105,6 @@ float calculateSOC(float voltage, float capacity);
 // Bad
 delay(1000);
 float x = voltage * 0.8;
-```
-
-### Python (Dashboard)
-
-- Follow [PEP 8](https://pep8.org/)
-- Use type hints for all function signatures
-- Flask routes must not contain business logic — delegate to model/service layer
-- All database writes must go through SQLAlchemy models, not raw SQL
-
-```python
-# Good
-def calculate_cost(energy_kwh: float, rate: float) -> float:
-    return round(energy_kwh * rate, 2)
-
-# Bad
-cost = e * r
 ```
 
 ### Documentation
