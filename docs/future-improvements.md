@@ -1,119 +1,173 @@
 # Future Improvements
 
-This document outlines realistic next steps that follow logically from the current prototype. Each item is technically grounded — no item requires fabricated hardware or impossible results.
+> **Important:** All items in this document are **proposed upgrades only**. None are implemented in the current prototype. The current system uses Arduino Nano + GSM SIM900A as described in the main README.
 
 ---
 
-## High Priority
+## Immediate Upgrades (V2 — Short Term)
 
-### 1. OCPP 1.6 Protocol Implementation
+### V2.1 — Replace Arduino Nano with ESP32
 
-**What it is:** Open Charge Point Protocol (OCPP) is the industry standard for communication between EV charge points and a central management system (CSMS). It runs over WebSocket.
+**Why:** ESP32 provides built-in Wi-Fi (802.11 b/g/n), Bluetooth, dual-core Xtensa LX6 processor, 520KB SRAM, 4MB flash, and hardware UART — eliminating SoftwareSerial constraints.
 
-**Why it matters:** Without OCPP, the station cannot be registered with commercial charging networks (Tata Power EZ Charge, Ather Grid, etc.) or fleet management platforms.
+**Impact:**
+- Eliminate SoftwareSerial instability with GSM
+- Add Wi-Fi for OTA firmware updates
+- Enable MQTT telemetry without hardware changes
+- Open path to web dashboard integration
 
-**What needs to change:**
-- Replace the custom MQTT telemetry with OCPP 1.6 JSON messages (`BootNotification`, `Heartbeat`, `StartTransaction`, `StopTransaction`, `MeterValues`).
-- Requires switching the ESP32 MQTT client for a WebSocket client library (e.g., `arduinoWebSockets`).
-- A free open-source CSMS like [SteVe](https://github.com/steve-community/steve) can be used as the backend.
+**Estimated effort:** 2–3 days; firmware rewrite required due to ESP32 API differences.
 
-**Estimated effort:** 3–4 weeks for a working OCPP 1.6 Core Profile implementation.
+### V2.2 — RFID User Authentication
 
----
+**Why:** SMS-only payment verification has no per-user session tracking. RFID (MFRC522) enables registered-user model.
 
-### 2. GSM / 4G Fallback Connectivity
+**Implementation:**
+- MFRC522 on SPI interface
+- EEPROM/SPIFFS whitelist of authorized UIDs
+- Session tied to user UID for analytics
 
-**What it is:** Add a SIM800L or SIM7600 GSM module as a secondary network interface when Wi-Fi is unavailable.
+### V2.3 — Dedicated Current Sensor (ACS712)
 
-**Why it matters:** Outdoor charging stations rarely have reliable Wi-Fi coverage. GSM ensures data continuity.
+**Why:** Current SOC estimation relies solely on voltage, which has known inaccuracies. Adding ACS712-5A enables coulomb counting for accurate SOC.
 
-**What needs to change:**
-- Add a SIM800L module on UART2 (GPIO 16/17).
-- Implement a connection manager that switches between Wi-Fi and GSM based on `WiFi.status()`.
-- MQTT over GPRS is achievable at low data rates (telemetry JSON is ~150 bytes per message).
+**Formula:** `SOC(t) = SOC(t₀) + (∫ I(t) dt) / C_rated × 100%`
 
-**Known constraint:** SIM800L supports only 2G. In areas where 2G is being phased out (urban India), the SIM7600 (4G LTE) module is preferred.
+### V2.4 — Upgraded Temperature Sensing (DS18B20)
 
----
-
-## Medium Priority
-
-### 3. Mobile App (Flutter)
-
-**What it is:** A cross-platform mobile app (Android + iOS) to replace the browser dashboard.
-
-**Features to add:**
-- Push notifications on session start/end (via Firebase Cloud Messaging).
-- Session history with filter by date.
-- QR code display for payment.
-- Native SOC gauge widget.
-
-**What needs to change on the backend:** Add JWT-based authentication to Flask routes. Expose a `/api/auth` endpoint for login. Use Flask-JWT-Extended.
+**Why:** DS18B20 provides ±0.5°C digital accuracy over 1-Wire; immune to ADC noise that affects LM35. Also supports multiple sensors on single wire (for per-cell temperature).
 
 ---
 
-### 4. UPI / QR Code Payment Integration
+## Mid-Term Enhancements (V3 — Cloud Connected)
 
-**What it is:** Replace the post-pay ledger model with a pre-pay or instant-pay flow using UPI deep links or Razorpay API.
+### V3.1 — MQTT IoT Dashboard
 
-**Flow:**
-1. User scans QR code displayed on LCD or mobile app.
-2. UPI payment is made via any UPI app.
-3. Razorpay webhook confirms payment to the Flask backend.
-4. Flask backend publishes an MQTT `unlock` command.
-5. ESP32 opens the relay only after payment confirmation.
+**Technology:** ESP32 + Mosquitto MQTT Broker + Flask/Node-RED
 
-**Constraint:** Razorpay API requires a registered business account. Test mode is free. Full production requires RBI compliance for payment collection.
+**Architecture:**
+```
+ESP32 → Wi-Fi → MQTT Broker → Flask App → Browser Dashboard
+```
 
----
+**Dashboard features:**
+- Live SOC gauge
+- Temperature trend chart
+- Session history table
+- Payment ledger
 
-### 5. Multi-Port Charging Station
+### V3.2 — Cloud Backend
 
-**What it is:** Expand from 1 charging port to 4 ports managed by a single ESP32 (or ESP32-S3 for more GPIO).
+**Technology:** AWS IoT Core or Firebase Realtime Database
 
-**Architecture change:**
-- 4 relay modules on separate GPIO pins.
-- 4 INA219 sensors on the same I2C bus (different I2C addresses: 0x40, 0x41, 0x44, 0x45 — selectable via A0/A1 pins).
-- Shared BMS logic, separate session state per port.
-- MQTT topic becomes `ev/port/1/telemetry`, `ev/port/2/telemetry`, etc.
+**Benefits:**
+- Multi-station management from single dashboard
+- Remote monitoring and alerts
+- Long-term session analytics
+- OTA firmware updates via AWS IoT
 
-**Known constraint:** DS18B20 sensors share one 1-Wire bus; up to 8 sensors can coexist on a single pin. Each sensor has a factory-programmed 64-bit ROM code used for addressing.
+### V3.3 — QR Code Payment Integration
 
----
+**Technology:** Razorpay / PayU API
 
-## Low Priority
-
-### 6. Solar PV Input Integration
-
-**What it is:** Add a solar panel with an MPPT charge controller (e.g., CN3791 or a commercial unit like EPSolar VS-series) to provide solar-assisted charging.
-
-**What changes in firmware:**
-- Monitor a second INA219 on the solar input line.
-- Track solar energy contribution separately (`solar_wh` vs `grid_wh`).
-- Publish both values in telemetry so the dashboard can show the renewable fraction.
-
-**Constraint:** An MPPT controller handles the panel-to-battery conversion. The ESP32 only monitors; it does not control the MPPT.
+**Why:** Replaces SMS parsing with verified API callbacks — eliminates false-positive SMS parsing issues and supports multiple payment methods (UPI, card, wallet).
 
 ---
 
-### 7. Cloud Deployment (AWS IoT Core)
+## Advanced Features (V4 — Mobile App)
 
-**What it is:** Replace local Mosquitto with AWS IoT Core as the MQTT broker, and deploy the Flask dashboard on an EC2 instance or as a Lambda + API Gateway serverless app.
+### V4.1 — Flutter Mobile Application
 
-**What changes:**
-- AWS IoT Core requires TLS and X.509 certificate authentication. The ESP32 must store the device certificate and private key (in SPIFFS).
-- PubSubClient supports TLS via `WiFiClientSecure`.
-- The Flask app connects to IoT Core using the `AWSIoTPythonSDK` or `boto3`.
+**Technology:** Flutter (Android + iOS)
 
-**Cost estimate:** AWS IoT Core free tier covers 500,000 messages/month. At 1 message/5s, a single station sends ~518,400 messages/month — just at the free tier limit.
+**Features:**
+- User registration and RFID card management
+- QR scan to start session
+- Live session monitoring via MQTT WebSocket
+- Payment history
+- Station locator map
+
+### V4.2 — Multi-Port Station
+
+**Technology:** ESP32 + 4× SSRs + 4× BMS modules
+
+**Benefit:** Single controller manages 4 simultaneous charging ports with independent BMS and payment tracking per port.
 
 ---
 
-## Not in Scope
+## AI & Analytics (V5)
 
-The following items are intentionally excluded from this project's roadmap because they require regulatory certification, utility grid approvals, or specialised hardware beyond a diploma project:
+### V5.1 — Battery Degradation Prediction
 
-- **AC grid connection:** Any connection to the domestic/commercial grid requires approval from the State Electricity Board and compliance with IE Rules 2023.
-- **Type 2 / CCS2 / CHAdeMO connector:** These connectors require IEC 62196 certified hardware and interoperability testing.
-- **DC fast charging (>3.3kW):** Requires power electronics design far beyond the scope of an embedded systems diploma project.
-- **Vehicle-to-Grid (V2G):** Requires bidirectional inverter hardware and grid synchronisation, which is a standalone research field.
+**Technology:** LSTM neural network on historical SOC/capacity data
+
+**Input features:**
+- Cycle count
+- Temperature history
+- Charge/discharge rate
+- Capacity fade measurements
+
+**Output:** Predicted remaining cycle life (SOH trend)
+
+### V5.2 — Adaptive Charging Algorithm
+
+**Technology:** Reinforcement learning on charging parameters
+
+**Goal:** Maximize battery life by dynamically adjusting charging rate based on temperature, SOC, and historical degradation rate.
+
+---
+
+## Grid Integration (V6)
+
+### V6.1 — OCPP 1.6 Protocol
+
+**Technology:** Open Charge Point Protocol implementation on ESP32
+
+**Benefit:** Interoperability with commercial Charge Point Management Systems (CPMS) — enables the station to connect to networks like Ather Grid, Tata Power EV, or state-run EVSE networks.
+
+### V6.2 — Demand Response Charging
+
+**Technology:** Grid signal API + smart scheduling
+
+**Concept:** Station defers charging to off-peak hours when grid signals indicate high load, reducing electricity cost and grid stress.
+
+### V6.3 — Solar MPPT Integration
+
+**Technology:** MPPT controller (e.g., CN3722) + solar panel input
+
+**Architecture:**
+```
+Solar Panel → MPPT Controller → Battery Pack (via BMS)
+Grid Supply → SSR (backup) → Battery Pack (via BMS)
+```
+
+**Benefit:** Renewable energy reduces per-unit charging cost and carbon footprint.
+
+---
+
+## Hardware Modernization Timeline
+
+```mermaid
+gantt
+    title Future Development Roadmap
+    dateFormat  YYYY-MM
+    section V2 Short Term
+    ESP32 Migration           :2026-07, 1M
+    RFID Authentication       :2026-08, 1M
+    Current Sensor (ACS712)   :2026-08, 2w
+    section V3 Cloud
+    MQTT Dashboard            :2026-09, 2M
+    Cloud Backend             :2026-10, 2M
+    QR Payment API            :2026-11, 1M
+    section V4 App
+    Flutter Mobile App        :2027-01, 3M
+    Multi-Port Support        :2027-03, 2M
+    section V5 AI
+    Degradation Prediction    :2027-06, 3M
+    Adaptive Charging         :2027-09, 3M
+    section V6 Grid
+    OCPP 1.6 Protocol         :2028-01, 4M
+    Solar MPPT Integration    :2028-06, 3M
+```
+
+See [version_2_roadmap.md](version_2_roadmap.md) for detailed engineering specifications per version.
