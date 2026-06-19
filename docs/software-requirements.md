@@ -1,235 +1,169 @@
-# Software Requirements
+# Software Requirements — Smart EV Charging Station with BMS
 
 ## Development Environment
 
 | Tool | Version | Platform | Purpose |
 |---|---|---|---|
-| Arduino IDE | 2.3.x | Win/Mac/Linux | Firmware development and flashing |
-| Python | 3.9 – 3.12 | Win/Mac/Linux | Dashboard backend |
-| Git | 2.40+ | Any | Version control |
-| Mosquitto | 2.0.x | Win/Mac/Linux | Local MQTT broker |
-| SQLite Browser | 3.12+ | Any | Inspect session database (optional) |
-| VS Code | 1.90+ | Any | Recommended code editor |
+| Arduino IDE | 2.3.x or later | Windows / Linux / macOS | Firmware development and upload |
+| Arduino Nano Board Package | ATmega328P (built-in) | Arduino IDE | Board definitions |
+| avr-gcc | Bundled with Arduino IDE | — | C++ compiler for ATmega328P |
+| avrdude | Bundled with Arduino IDE | — | Firmware upload via USB |
+| Git | 2.x | All platforms | Version control |
+| Serial Monitor | Arduino IDE built-in | — | Debug output from Serial.print |
 
 ---
 
-## Firmware Dependencies (Arduino / ESP32)
+## Arduino Libraries Required
 
-Install all libraries via **Arduino IDE → Tools → Manage Libraries** or via the PlatformIO library registry.
+All libraries below are installable via Arduino IDE → **Tools → Manage Libraries**.
 
-### Board Support Package
+| Library | Version | Purpose | Install Name |
+|---|---|---|---|
+| LiquidCrystal | Built-in (Arduino) | 16×2 LCD (HD44780) driver | `LiquidCrystal` |
+| SoftwareSerial | Built-in (Arduino) | UART for GSM SIM900A | `SoftwareSerial` |
+| EEPROM | Built-in (Arduino) | Session logging to EEPROM | `EEPROM` |
 
-```
-Board Manager URL: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-Package: esp32 by Espressif Systems
-Version: 2.0.14
-```
+**No third-party libraries required.** The firmware intentionally uses only Arduino built-in libraries to minimize flash usage and avoid dependency issues on constrained hardware (32KB flash).
 
-**Arduino IDE Board Settings:**
+---
+
+## Arduino IDE Setup
+
+### 1. Install Arduino IDE
+
+Download Arduino IDE 2.3.x from [arduino.cc/en/software](https://www.arduino.cc/en/software).
+
+### 2. Board Configuration
+
+Open the firmware sketch and set:
 
 | Setting | Value |
 |---|---|
-| Board | ESP32 Dev Module |
-| Upload Speed | 115200 |
-| CPU Frequency | 240 MHz (WiFi/BT) |
-| Flash Frequency | 80 MHz |
-| Flash Mode | QIO |
-| Flash Size | 4 MB (32 Mb) |
-| Partition Scheme | Default 4MB with spiffs |
-| Core Debug Level | None |
-| PSRAM | Disabled |
-| Port | (your COM port) |
+| Board | `Arduino Nano` |
+| Processor | `ATmega328P` (or `ATmega328P Old Bootloader` if upload fails) |
+| Port | COM port of your Arduino Nano (varies by system) |
+| Upload Speed | `115200` |
+
+### 3. Open the Sketch
+
+```
+File → Open → firmware/arduino/smart_ev_charger/smart_ev_charger.ino
+```
+
+Arduino IDE will prompt to open the full sketch folder — accept this so all `.h` and `.cpp` files are included.
+
+### 4. Calibrate `config.h`
+
+Before uploading, open `config.h` and review:
+
+```cpp
+// Verify your voltage divider resistor values match these
+#define VDIV_SCALE_FACTOR     0.3197f  // R2/(R1+R2) = 4700/14700
+
+// Set your UPI payment rate
+#define RATE_PER_UNIT_RS      10.0f    // ₹ per kWh
+
+// Adjust safety thresholds if needed
+#define TEMP_CUTOFF_C         45.0f    // °C — overtemp cutoff
+```
+
+### 5. Compile and Upload
+
+Click **Verify** (✓) first to check for compilation errors, then **Upload** (→).
+
+Expected compile output:
+```
+Sketch uses ~21000 bytes (68%) of program storage space.
+Global variables use ~450 bytes (21%) of dynamic memory.
+```
 
 ---
 
-### Required Libraries
+## Hardware Driver Requirements
 
-| Library | Version | Author | Install via |
-|---|---|---|---|
-| MFRC522 | 1.4.10 | miguelbalboa | Library Manager |
-| Adafruit INA219 | 1.2.3 | Adafruit | Library Manager |
-| Adafruit BusIO | 1.16.1 | Adafruit | Library Manager (dependency of INA219) |
-| OneWire | 2.3.7 | Paul Stoffregen | Library Manager |
-| DallasTemperature | 3.9.0 | Miles Burton | Library Manager |
-| LiquidCrystal\_I2C | 1.1.3 | Frank de Brabander | Library Manager |
-| PubSubClient | 2.8.0 | Nick O'Leary | Library Manager |
-| ArduinoJson | 6.21.3 | Benoit Blanchon | Library Manager |
+| Component | Driver | Notes |
+|---|---|---|
+| Arduino Nano (CH340G USB chip) | CH340 driver | Required on Windows 10/11 if not auto-installed. Download from [wch-ic.com](http://www.wch-ic.com/downloads/CH341SER_EXE.html) |
+| Arduino Nano (CP2102 USB chip) | CP2102 driver | Some clone Nanos use CP2102. Download from Silicon Labs website |
+| Arduino Nano (FTDI USB chip) | FTDI VCP driver | Genuine Arduino Nanos use FTDI. Usually auto-installed on Windows |
 
-**Built-in (no install needed):**
-- `WiFi.h` — included in ESP32 Arduino core
-- `SPI.h` — included in Arduino core
-- `Wire.h` — included in Arduino core
-- `EEPROM.h` — included in ESP32 Arduino core
+**To identify your USB chip:** Check the small IC between the USB port and the Nano's edge. CH340G = clone, FT232RL = genuine.
 
 ---
 
-### Verifying Library Versions
+## Serial Monitor Usage
 
-After installing, confirm versions in `Arduino IDE → Sketch → Include Library → Manage Libraries` and check the version column. Version mismatches between ArduinoJson v5 and v6 are a common source of compile errors — this project uses v6 syntax (`StaticJsonDocument`, not `StaticJsonBuffer`).
+Connect Arduino via USB and open **Tools → Serial Monitor** at **115200 baud** to see debug output:
+
+```
+[BOOT] Smart EV Charger v1.0
+[BMS] Initial voltage: 11.24V  SOC: 45%  Temp: 28.4C
+[GSM] Sending AT...
+[GSM] Module OK
+[GSM] SMS text mode set
+[GSM] Ready
+[SYSTEM] State: IDLE
+[GSM] Polling for SMS...
+[GSM] No messages
+[GSM] Polling for SMS...
+[GSM] Found 1 message
+[GSM] SMS body: "Payment of Rs 50 received..."
+[GSM] Payment valid: Rs 50.00
+[GSM] Session duration: 18000 seconds
+[SYSTEM] State: PRE_CHECK
+[BMS] Voltage: 11.24V  Temp: 28.4C  SOC: 45%  Fault: NONE
+[SYSTEM] Safety OK — starting charge
+[SYSTEM] State: CHARGING
+[BMS] Voltage: 11.31V  Temp: 29.1C  SOC: 47%
+[BMS] Voltage: 11.38V  Temp: 29.3C  SOC: 50%
+```
 
 ---
 
-## Backend Dependencies (Python)
+## Verifying Hardware Connections via Serial Monitor
 
-### Installation
+Before final assembly, use these quick tests:
+
+**Test 1 — Voltage divider reading:**
+```cpp
+// Add to setup() temporarily:
+Serial.println(analogRead(A1));  // Should be ~460–860 for 9–16.8V range
+```
+
+**Test 2 — LM35 temperature reading:**
+```cpp
+// Add to setup() temporarily:
+float temp = analogRead(A0) * (5.0 / 1024.0) * 100.0;
+Serial.print("Temp: "); Serial.println(temp);  // Should read room temp ~25-35°C
+```
+
+**Test 3 — GSM AT response:**
+```cpp
+// Add to setup() temporarily:
+gsmSerial.println("AT");
+delay(1000);
+while (gsmSerial.available()) Serial.write(gsmSerial.read());
+// Expected output: "AT\r\n\r\nOK\r\n"
+```
+
+**Test 4 — SSR control:**
+```cpp
+// Add to loop() temporarily:
+digitalWrite(PIN_SSR, HIGH); delay(2000);
+digitalWrite(PIN_SSR, LOW);  delay(2000);
+// SSR should click/activate every 2 seconds
+```
+
+---
+
+## Repository Clone and Setup
 
 ```bash
-# From the project root
-cd software
-
-python -m venv venv
-
-# Activate:
-source venv/bin/activate        # Linux / macOS
-venv\Scripts\activate.bat       # Windows cmd
-venv\Scripts\Activate.ps1       # Windows PowerShell
-
-pip install -r requirements.txt
-```
-
-### `requirements.txt`
-
-```
-Flask==3.0.3
-flask-mqtt==1.1.1
-Flask-SQLAlchemy==3.1.1
-paho-mqtt==1.6.1
-python-dotenv==1.0.1
-pytest==8.2.0
-pytest-flask==1.3.0
-```
-
-### Package Roles
-
-| Package | Role |
-|---|---|
-| Flask | HTTP server and template rendering |
-| flask-mqtt | MQTT subscriber integrated with Flask app context |
-| Flask-SQLAlchemy | ORM — maps Python classes to SQLite tables |
-| paho-mqtt | Underlying MQTT client used by flask-mqtt |
-| python-dotenv | Loads `.env` file into `os.environ` |
-| pytest | Test runner |
-| pytest-flask | Flask test client fixture for API tests |
-
----
-
-## Environment Variables (`.env`)
-
-Create a `.env` file in `software/dashboard/` (never commit this file):
-
-```env
-# MQTT broker
-MQTT_BROKER=127.0.0.1
-MQTT_PORT=1883
-
-# Database
-DATABASE_URL=sqlite:///ev_charging.db
-
-# Tariff
-UNIT_RATE_RS=8.0
-
-# Flask
-FLASK_ENV=development
-SECRET_KEY=change-this-to-a-random-string
-```
-
-A `.env.example` with placeholder values is committed in the repository.
-
----
-
-## MQTT Broker Setup (Mosquitto)
-
-### Install
-
-```bash
-# Ubuntu / Debian
-sudo apt update && sudo apt install mosquitto mosquitto-clients -y
-sudo systemctl enable mosquitto
-sudo systemctl start mosquitto
-
-# Windows — download installer from https://mosquitto.org/download/
-# macOS
-brew install mosquitto
-brew services start mosquitto
-```
-
-### Verify Broker
-
-```bash
-# In one terminal — subscribe to all EV topics
-mosquitto_sub -h 127.0.0.1 -t "ev/#" -v
-
-# In another terminal — publish a test message
-mosquitto_pub -h 127.0.0.1 -t "ev/test" -m '{"hello":"world"}'
-```
-
-If the subscriber terminal shows the message, the broker is working.
-
-### Default Mosquitto Config
-
-The default Mosquitto 2.x config (`/etc/mosquitto/mosquitto.conf`) does not allow anonymous connections. Add these lines to enable local anonymous access (for development only):
-
-```
-# /etc/mosquitto/mosquitto.conf
-listener 1883 127.0.0.1
-allow_anonymous true
-```
-
-Restart after editing: `sudo systemctl restart mosquitto`
-
----
-
-## Running Tests
-
-```bash
+git clone https://github.com/yourusername/SmartEV-Charging-System.git
 cd SmartEV-Charging-System
 
-# Install test dependencies (if not already done)
-pip install -r software/requirements.txt
-
-# Run all tests
-pytest tests/ -v
-
-# Run a specific test file
-pytest tests/test_bms.py -v
-
-# Run with coverage report
-pip install pytest-cov
-pytest tests/ --cov=software --cov-report=term-missing
+# Open firmware in Arduino IDE
+# File → Open → firmware/arduino/smart_ev_charger/smart_ev_charger.ino
 ```
 
-Expected output — all tests should pass:
-
-```
-tests/test_bms.py::TestSOCBoundaries::test_empty_battery         PASSED
-tests/test_bms.py::TestSOCBoundaries::test_below_empty_clamps_to_zero  PASSED
-tests/test_bms.py::TestSOCBoundaries::test_full_battery          PASSED
-tests/test_bms.py::TestSOCBoundaries::test_above_full_clamps_to_100    PASSED
-tests/test_bms.py::TestSOCInterpolation::test_midpoint_3v2_to_3v4     PASSED
-tests/test_bms.py::TestSOCInterpolation::test_midpoint_3v6_to_3v7     PASSED
-tests/test_bms.py::TestSOCInterpolation::test_exact_table_values       PASSED
-tests/test_bms.py::TestSOCInterpolation::test_soc_monotonically_increasing PASSED
-tests/test_bms.py::TestSOCInterpolation::test_soc_always_in_range      PASSED
-tests/test_bms.py::TestFaultThresholds::test_overvoltage_trip          PASSED
-tests/test_bms.py::TestFaultThresholds::test_no_overvoltage_below_limit PASSED
-tests/test_bms.py::TestFaultThresholds::test_overtemp_trip             PASSED
-tests/test_bms.py::TestFaultThresholds::test_no_overtemp_at_limit      PASSED
-tests/test_bms.py::TestFaultThresholds::test_overcurrent_trip          PASSED
-tests/test_bms.py::TestFaultThresholds::test_overcurrent_safe          PASSED
-tests/test_payment.py::TestCalculateCost::test_zero_energy_is_zero_cost PASSED
-...
-======================== 26 passed in 0.42s ========================
-```
-
----
-
-## Simulation (Without Hardware)
-
-If hardware is not available, the firmware logic can be simulated using **Wokwi** (free, browser-based ESP32 simulator):
-
-1. Go to [wokwi.com](https://wokwi.com) and create a new ESP32 project.
-2. Add components: MFRC522, LCD (I2C), and a resistor + LED for the relay indicator.
-3. Copy `firmware/src/*.ino`, `*.h`, and `*.cpp` files into the Wokwi editor.
-4. See `simulation/README.md` for the Wokwi JSON diagram configuration.
-
-The Python dashboard can be run locally and tested independently using the test MQTT publisher script in `simulation/mqtt_simulator.py`.
+No `pip install` or `npm install` required — this is a pure Arduino (C++) embedded project with no host-side runtime dependencies.
