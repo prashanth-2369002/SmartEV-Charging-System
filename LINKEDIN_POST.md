@@ -57,7 +57,7 @@ ESP32 + Wi-Fi → Cloud Dashboard → Flutter Mobile App → AI Battery Analytic
 🏆 **Selected for State-Level Technical Exhibition** — live demo with judges evaluating system under real UPI payment conditions.
 
 📂 **Full repository** (firmware, docs, architecture diagrams, BMS design):
-👉 [GitHub Link]
+👉 https://github.com/prashanth-2369002/SmartEV-Charging-System
 
 ---
 

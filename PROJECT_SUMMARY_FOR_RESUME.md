@@ -82,8 +82,7 @@ Use these under a "Projects" section. Start every bullet with a strong action ve
 
 ## GitHub Repository Link
 
-> Add your actual repository URL here:
-> `https://github.com/[your-username]/SmartEV-Charging-System`
+> `https://github.com/prashanth-2369002/SmartEV-Charging-System`
 
 Include this link in:
 - Resume (Projects section)

@@ -167,7 +167,7 @@
 
 **Institution name and department**
 
-**GitHub Repository:** `github.com/yourusername/SmartEV-Charging-System`
+**GitHub Repository:** `github.com/prashanth-2369002/SmartEV-Charging-System`
 
 **QR code linking to GitHub repository**
 

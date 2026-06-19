@@ -159,7 +159,7 @@ digitalWrite(PIN_SSR, LOW);  delay(2000);
 ## Repository Clone and Setup
 
 ```bash
-git clone https://github.com/yourusername/SmartEV-Charging-System.git
+git clone https://github.com/prashanth-2369002/SmartEV-Charging-System.git
 cd SmartEV-Charging-System
 
 # Open firmware in Arduino IDE
